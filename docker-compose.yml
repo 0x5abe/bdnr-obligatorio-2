@@ -1,0 +1,21 @@
+name: security_subsystem
+
+services:
+  redis:
+    image: redis:latest
+    container_name: redis_security
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+
+  jupyter:
+    image: jupyter/base-notebook:latest
+    container_name: jupyter_security
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/home/jovyan/work
+    depends_on:
+      - redis
