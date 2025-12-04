@@ -1,0 +1,334 @@
+version: "3.9"
+
+services:
+  # CONFIG SERVER REPLICA SET
+  configsvr1:
+    image: mongo:8.2
+    container_name: configsvr1
+    command:
+      [
+        "mongod",
+        "--configsvr",
+        "--replSet",
+        "cfgReplSet",
+        "--port",
+        "27017",
+        "--dbpath",
+        "/data/db",
+        "--bind_ip_all",
+      ]
+    ports:
+      - "27101:27017"
+    volumes:
+      - ./mongo-data/config1:/data/db
+    networks:
+      - duolingo-net
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' || exit 1",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  configsvr2:
+    image: mongo:8.2
+    container_name: configsvr2
+    command:
+      [
+        "mongod",
+        "--configsvr",
+        "--replSet",
+        "cfgReplSet",
+        "--port",
+        "27017",
+        "--dbpath",
+        "/data/db",
+        "--bind_ip_all",
+      ]
+    ports:
+      - "27102:27017"
+    volumes:
+      - ./mongo-data/config2:/data/db
+    networks:
+      - duolingo-net
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' || exit 1",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  configsvr3:
+    image: mongo:8.2
+    container_name: configsvr3
+    command:
+      [
+        "mongod",
+        "--configsvr",
+        "--replSet",
+        "cfgReplSet",
+        "--port",
+        "27017",
+        "--dbpath",
+        "/data/db",
+        "--bind_ip_all",
+      ]
+    ports:
+      - "27103:27017"
+    volumes:
+      - ./mongo-data/config3:/data/db
+    networks:
+      - duolingo-net
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' || exit 1",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  # SHARD REPLICA SET (1 SHARD)
+  shard1a:
+    image: mongo:8.2
+    container_name: shard1a
+    command:
+      [
+        "mongod",
+        "--shardsvr",
+        "--replSet",
+        "shard1ReplSet",
+        "--port",
+        "27017",
+        "--dbpath",
+        "/data/db",
+        "--bind_ip_all",
+      ]
+    ports:
+      - "27201:27017"
+    volumes:
+      - ./mongo-data/shard1a:/data/db
+    networks:
+      - duolingo-net
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' || exit 1",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  shard1b:
+    image: mongo:8.2
+    container_name: shard1b
+    command:
+      [
+        "mongod",
+        "--shardsvr",
+        "--replSet",
+        "shard1ReplSet",
+        "--port",
+        "27017",
+        "--dbpath",
+        "/data/db",
+        "--bind_ip_all",
+      ]
+    ports:
+      - "27202:27017"
+    volumes:
+      - ./mongo-data/shard1b:/data/db
+    networks:
+      - duolingo-net
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' || exit 1",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  shard1c:
+    image: mongo:8.2
+    container_name: shard1c
+    command:
+      [
+        "mongod",
+        "--shardsvr",
+        "--replSet",
+        "shard1ReplSet",
+        "--port",
+        "27017",
+        "--dbpath",
+        "/data/db",
+        "--bind_ip_all",
+      ]
+    ports:
+      - "27203:27017"
+    volumes:
+      - ./mongo-data/shard1c:/data/db
+    networks:
+      - duolingo-net
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' || exit 1",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  # MONGOS ROUTER
+  mongos:
+    image: mongo:8.2
+    container_name: mongos
+    depends_on:
+      configsvr1:
+        condition: service_healthy
+      configsvr2:
+        condition: service_healthy
+      configsvr3:
+        condition: service_healthy
+    command:
+      [
+        "mongos",
+        "--port",
+        "27017",
+        "--bind_ip_all",
+        "--configdb",
+        "cfgReplSet/configsvr1:27017,configsvr2:27017,configsvr3:27017",
+      ]
+    ports:
+      - "27020:27017"
+    networks:
+      - duolingo-net
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --quiet --host localhost:27017 --eval 'db.runCommand({ ping: 1 }).ok' || exit 1",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  # INIT ALL (CONFIG RS + SHARD RS + ADD SHARD)
+  init-cluster:
+    image: mongo:8.2
+    container_name: init-cluster
+    # REMOVED mongos from depends_on to prevent deadlock
+    depends_on:
+      configsvr1:
+        condition: service_healthy
+      configsvr2:
+        condition: service_healthy
+      configsvr3:
+        condition: service_healthy
+      shard1a:
+        condition: service_healthy
+      shard1b:
+        condition: service_healthy
+      shard1c:
+        condition: service_healthy
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        set -e
+
+        echo ">>> Waiting for configsvr1 to be reachable..."
+        until mongosh --quiet --host configsvr1:27017 --eval "db.adminCommand({ ping: 1 })" >/dev/null 2>&1; do
+          echo "    configsvr1 not ready yet..."
+          sleep 2
+        done
+
+        echo ">>> Initializing Config Server Replica Set..."
+        mongosh --host configsvr1:27017 --eval '
+          try {
+            var status = rs.status();
+            print("cfgReplSet already initialized");
+          } catch (e) {
+            print("Initializing cfgReplSet...");
+            rs.initiate({
+              _id: "cfgReplSet",
+              configsvr: true,
+              members: [
+                { _id: 0, host: "configsvr1:27017" },
+                { _id: 1, host: "configsvr2:27017" },
+                { _id: 2, host: "configsvr3:27017" }
+              ]
+            });
+          }
+        '
+
+        echo ">>> Waiting for shard1a to be reachable..."
+        until mongosh --quiet --host shard1a:27017 --eval "db.adminCommand({ ping: 1 })" >/dev/null 2>&1; do
+          echo "    shard1a not ready yet..."
+          sleep 2
+        done
+
+        echo ">>> Initializing Shard1 Replica Set..."
+        mongosh --host shard1a:27017 --eval '
+          try {
+            var status = rs.status();
+            print("shard1ReplSet already initialized");
+          } catch (e) {
+            print("Initializing shard1ReplSet...");
+            rs.initiate({
+              _id: "shard1ReplSet",
+              members: [
+                { _id: 0, host: "shard1a:27017" },
+                { _id: 1, host: "shard1b:27017" },
+                { _id: 2, host: "shard1c:27017" }
+              ]
+            });
+          }
+        '
+
+        # NOW we wait for mongos. Mongos might be restarting in the background
+        # until the Config RS was initialized above. Now it should succeed.
+        echo ">>> Waiting for mongos to be reachable..."
+        until mongosh --quiet --host mongos:27017 --eval "db.adminCommand({ ping: 1 })" >/dev/null 2>&1; do
+          echo "    mongos not ready yet (waiting for configdb connection)..."
+          sleep 2
+        done
+
+        echo ">>> Adding Shard to Mongos..."
+        mongosh --host mongos:27017 --eval '
+          try {
+            sh.addShard("shard1ReplSet/shard1a:27017,shard1b:27017,shard1c:27017");
+          } catch (e) {
+            if (e.codeName === "ShardAlreadyExists") {
+              print("Shard already exists, continuing");
+            } else {
+              throw e;
+            }
+          }
+          // Optional: Enable sharding for a specific DB
+          // db.getSiblingDB("admin").runCommand({ enableSharding: "duolingo_users" });
+        '
+
+        echo ">>> Cluster initialized successfully."
+    networks:
+      - duolingo-net
+
+networks:
+  duolingo-net:
+    external: true
